@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NearbyEssentials – find pharmacies, ATMs, cafes near you</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#F3EEF6; --surface:#FFFFFF; --ink:#231430; --muted:#6B5C7B; --line:#E2D8EA; --soft:#F1E7FA;
+      --brand:#7B2CBF; --brand-ink:#FFFFFF; --accent:#00B894;
+      --danger:#B42318; --danger-bg:#FDECEC; --warn:#8A5A00; --warn-bg:#FFF4DB; --ok:#127A4B;
+    }
+    [data-theme="dark"] {
+      --bg:#150E1F; --surface:#21162F; --ink:#F0E9F7; --muted:#A99BBB; --line:#35254A; --soft:#2C1D40;
+      --brand:#B67CFF; --brand-ink:#1A0B2A; --accent:#2EE6B8;
+      --danger:#FF9AA2; --danger-bg:#3A1620; --warn:#F5C66B; --warn-bg:#3A2D10; --ok:#6EE7A8;
+    }
+    body { font-family:'Plus Jakarta Sans', system-ui, sans-serif; background:var(--bg); color:var(--ink); transition:background .2s, color .2s; }
+    #map { min-height:280px; }
+    .topbar { background:var(--surface); border-bottom:1px solid var(--line); }
+    .logo { background:var(--brand); color:var(--brand-ink); width:36px; height:36px; border-radius:12px; display:grid; place-items:center; font-size:18px; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:1.1rem; padding:1rem; }
+    .muted { color:var(--muted); }
+    .link { color:var(--brand); }
+    .input { width:100%; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:.75rem; padding:.55rem .8rem; }
+    .input:focus { outline:2px solid var(--brand); outline-offset:1px; }
+    .input.border-red-500 { border-color:var(--danger); }
+    .input.border-green-600 { border-color:var(--ok); }
+    .btn { background:var(--brand); color:var(--brand-ink); border-radius:.75rem; padding:.5rem 1rem; font-weight:600; }
+    .btn:hover { filter:brightness(1.1); }
+    .btn-ghost { border:1px solid var(--brand); color:var(--brand); background:transparent; border-radius:.75rem; padding:.5rem .8rem; font-weight:600; font-size:.875rem; }
+    .btn-ghost:hover { background:var(--soft); }
+    .chip { border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:.35rem .85rem; font-size:.875rem; font-weight:600; transition:transform .1s; }
+    .chip:hover { background:var(--soft); }
+    .chip:active { transform:scale(.96); }
+    .chip[aria-pressed="true"] { background:var(--brand); color:var(--brand-ink); border-color:var(--brand); }
+    .place { display:flex; gap:.5rem; justify-content:space-between; border:1px solid var(--line); background:var(--surface); border-radius:.85rem; padding:.75rem; cursor:pointer; transition:background .15s; }
+    .place:hover { background:var(--soft); }
+    .place.selected { outline:2px solid var(--brand); background:var(--soft); }
+    .pill { background:var(--soft); color:var(--brand); border-radius:999px; padding:.1rem .6rem; font-size:.75rem; font-weight:700; white-space:nowrap; }
+    .fav { color:var(--brand); font-size:1.25rem; line-height:1; }
+    .dropdown { border:1px solid var(--line); background:var(--surface); border-radius:.75rem; overflow:hidden; font-size:.875rem; }
+    .sugg { padding:.5rem .75rem; cursor:pointer; border-bottom:1px solid var(--line); }
+    .sugg:hover { background:var(--soft); }
+    .status-error { background:var(--danger-bg); color:var(--danger); }
+    .status-empty { background:var(--warn-bg); color:var(--warn); }
+    .err { color:var(--danger); }
+    .spinner { border:3px solid var(--line); border-top-color:var(--brand); border-radius:50%; width:28px; height:28px; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration:3s; } .chip { transition:none; } }
+    input[type=range] { accent-color:var(--brand); }
+    .leaflet-container { border-radius:1.1rem; font-family:inherit; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--surface); color:var(--ink); }
+    .leaflet-popup-content-wrapper { border-radius:.85rem; }
+    .leaflet-control-layers, .leaflet-bar a { background:var(--surface); color:var(--ink); }
+    [data-theme="dark"] .leaflet-tile-pane { filter:brightness(.78) saturate(.9); }
+    .pin-wrap { width:38px; height:46px; display:flex; justify-content:center; transform-origin:50% 100%; animation:pop .3s ease-out both; }
+    .pin { width:34px; height:34px; margin-top:4px; background:var(--brand); border:3px solid #fff; border-radius:50% 50% 50% 0; transform:rotate(-45deg); box-shadow:0 4px 10px rgba(0,0,0,.35); display:grid; place-items:center; }
+    .pin span { transform:rotate(45deg); font-size:15px; }
+    .leaflet-marker-icon.active .pin { background:var(--accent); box-shadow:0 0 0 5px rgba(0,184,148,.35), 0 4px 10px rgba(0,0,0,.35); }
+    @keyframes pop { from { transform:scale(.3); opacity:0; } to { transform:scale(1); opacity:1; } }
+    .you { width:22px; height:22px; position:relative; }
+    .you span { position:absolute; inset:3px; border-radius:50%; background:var(--accent); border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+    .you::after { content:""; position:absolute; inset:0; border-radius:50%; background:var(--accent); opacity:.4; animation:ping 1.8s ease-out infinite; }
+    @keyframes ping { to { transform:scale(2.6); opacity:0; } }
+    @media (prefers-reduced-motion: reduce) { .pin-wrap, .you::after { animation:none; } }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <header class="topbar px-4 py-3 flex flex-wrap items-center gap-3 sticky top-0 z-[1500]">
+    <div class="logo" aria-hidden="true">📍</div>
+    <div>
+      <h1 class="text-lg font-extrabold leading-tight">NearbyEssentials</h1>
+      <p class="text-xs muted">Find what you need nearby, nearest first.</p>
+    </div>
+    <span class="ml-auto text-xs muted hidden md:inline">Press / to search · click the map to move your search point</span>
+    <button id="themeBtn" class="btn-ghost" aria-label="Switch colour theme">🌙 Dark</button>
+  </header>
+
+  <main class="grid lg:grid-cols-[440px_1fr] gap-4 p-4">
+    <section class="space-y-4" aria-label="Search and results">
+      <div class="card space-y-3">
+        <label for="searchInput" class="block text-sm font-semibold">Where are you? (area, landmark or address)</label>
+        <div class="flex gap-2">
+          <input id="searchInput" type="text" placeholder="e.g. Koramangala, Bengaluru" autocomplete="off" class="input flex-1">
+          <button id="locateBtn" class="btn-ghost">Use my location</button>
+        </div>
+        <ul id="suggestions" class="hidden dropdown"></ul>
+        <p id="locationLabel" class="text-xs muted"></p>
+
+        <div id="chips" class="flex flex-wrap gap-2" role="group" aria-label="Place category"></div>
+
+        <div>
+          <label for="radius" class="text-sm font-semibold">Search radius: <span id="radiusValue">1.5 km</span></label>
+          <input id="radius" type="range" min="500" max="5000" step="500" value="1500" class="w-full">
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <label class="flex items-center gap-1"><input id="filterOpen" type="checkbox"> Has opening hours</label>
+          <label class="flex items-center gap-1"><input id="filterWheel" type="checkbox"> Wheelchair friendly</label>
+        </div>
+        <div class="flex gap-2">
+          <input id="nameFilter" type="search" placeholder="Filter results by name" aria-label="Filter results by name" class="input flex-1 text-sm">
+          <select id="sortBy" aria-label="Sort results" class="input text-sm" style="width:auto">
+            <option value="distance">Nearest first</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between mb-1">
+          <h2 id="resultsTitle" class="font-extrabold text-lg">Results</h2>
+          <button id="showFavsBtn" class="text-sm underline link">Show saved places</button>
+        </div>
+        <p id="resultCount" class="text-xs muted mb-2"></p>
+        <div id="status" role="status" aria-live="polite"></div>
+        <ul id="results" class="space-y-2 max-h-[45vh] overflow-y-auto pr-1"></ul>
+      </div>
+
+      <form id="reportForm" class="card space-y-3" novalidate>
+        <h2 class="font-extrabold text-lg">Report a missing or wrong place</h2>
+        <div>
+          <label for="rName" class="text-sm font-semibold">Your name</label>
+          <input id="rName" type="text" class="input">
+          <p class="err text-xs mt-1" data-for="rName"></p>
+        </div>
+        <div>
+          <label for="rEmail" class="text-sm font-semibold">Email</label>
+          <input id="rEmail" type="email" class="input">
+          <p class="err text-xs mt-1" data-for="rEmail"></p>
+        </div>
+        <div>
+          <label for="rCat" class="text-sm font-semibold">Category</label>
+          <select id="rCat" class="input"><option value="">Choose a category</option></select>
+          <p class="err text-xs mt-1" data-for="rCat"></p>
+        </div>
+        <div>
+          <label for="rDesc" class="text-sm font-semibold">What is missing or wrong? (min 10 characters)</label>
+          <textarea id="rDesc" rows="3" class="input"></textarea>
+          <p id="descCount" class="text-xs muted mt-1">0/10 minimum</p>
+          <p class="err text-xs mt-1" data-for="rDesc"></p>
+        </div>
+        <button type="submit" class="btn">Send report</button>
+        <p id="formMsg" class="text-sm" style="color:var(--ok)" role="status"></p>
+      </form>
+    </section>
+
+    <aside aria-label="Map" class="h-[55vh] lg:h-[calc(100vh-110px)] lg:sticky lg:top-[78px]" style="border:1px solid var(--line);border-radius:1.1rem;overflow:hidden">
+      <div id="map" class="h-full w-full"></div>
+    </aside>
+  </main>
+
+  <footer class="text-center text-xs muted pb-6">
+    Map data © OpenStreetMap contributors · Search by Nominatim · Places by Overpass API
+  </footer>
+
+  <div id="toast" role="status" class="fixed bottom-4 left-1/2 -translate-x-1/2 text-sm rounded-xl px-4 py-2 shadow-lg opacity-0 pointer-events-none transition-opacity z-[2000]" style="background:var(--brand);color:var(--brand-ink)"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
